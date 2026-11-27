@@ -9,11 +9,9 @@
   // ═══════════════ 管理员邮箱验证码登录 ═══════════════
   // 需要同时配置 secret RESEND_API_KEY 才会生效（登录页才显示邮箱登录入口）。
   // ADMIN_EMAIL 是唯一白名单，其他邮箱一律拒发，防止被当成发信器滥用。
-  // MAIL_FROM：复用 mail.lovlin.cn（Cloud Mail）里已验证的 lovlin.cn 发信通道，
-  //            密钥与那边同一把（Resend 仅发送权限），无需单独注册。
   "vars": {
-    "ADMIN_EMAIL": "1740242084@qq.com",
-    "MAIL_FROM": "cloud-r2pan <noreply@lovlin.cn>"
+    "ADMIN_EMAIL": "koizora@lovlin.cn",
+    "MAIL_FROM": "R2网盘 <noreply@lovlin.cn>"
   },
 
   // 保留原有的 workers.dev 测试域名（不加这一行，部署后会被默认关闭）
