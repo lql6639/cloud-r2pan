@@ -9,8 +9,13 @@
   // ═══════════════ 管理员邮箱验证码登录 ═══════════════
   // 需要同时配置 secret RESEND_API_KEY 才会生效（登录页才显示邮箱登录入口）。
   // ADMIN_EMAIL 是唯一白名单，其他邮箱一律拒发，防止被当成发信器滥用。
+  //
+  // ⚠️ 必须用「非 lovlin.cn 根域」的地址。
+  //    Resend 的信封发件人是 ...@send.lovlin.cn，若收件人也在 lovlin.cn，
+  //    Cloudflare Email Routing 会按同域回环直接丢弃（不进转发日志，表现为"发了收不到"）。
+  //    跨域（→ QQ）已验证可达；若以后要用域名邮箱，需在 Resend 单独验证另一个域名再换过来。
   "vars": {
-    "ADMIN_EMAIL": "koizora@lovlin.cn",
+    "ADMIN_EMAIL": "1740242084@qq.com",
     "MAIL_FROM": "R2网盘 <noreply@lovlin.cn>"
   },
 
