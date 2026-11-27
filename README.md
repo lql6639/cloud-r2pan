@@ -1,4 +1,4 @@
-# cloud-r2pan 架构说明
+# 架构说明
 
 一个 iOS 26 液态玻璃风格的网盘分享系统，基于 **Cloudflare Workers + R2 + D1** 构建。支持文件上传、分享链接（有效期 / 次数 / 访问密码）、流量限额、单 IP 限流与自动封禁、下载日志、登录审计、2FA 两步验证、Turnstile 人机验证，以及中英双语。
 
@@ -6,15 +6,15 @@
 
 ## 技术选型
 
-| 层 | 技术 | 理由 |
-|---|---|---|
-| 计算 | **Cloudflare Workers** | 边缘计算，毫秒级冷启动，自带全球 CDN，零服务器运维 |
-| 对象存储 | **Cloudflare R2** | 与 Worker 同生态，API 兼容 S3，无出站流量费 |
-| 数据库 | **Cloudflare D1** | Serverless SQLite，支持 SQL 原子更新（用于下载计数扣减），自带索引优化 |
-| 前端 | **原生 HTML + CSS + JavaScript** | 单文件无构建，`fetch` + `FormData` + 动态模板，零运行时开销 |
-| 加密 | **Web Crypto API** | Worker 运行时原生支持（SHA-256、HMAC-SHA256、AES-GCM、HKDF），无第三方依赖 |
-| 人机验证 | **Cloudflare Turnstile** | 与 Workers 同生态，零配置，前端 widget + 后端 siteverify 双重校验 |
-| 2FA | **TOTP (RFC 6238)** | Google Authenticator 标准，Worker 原生 `crypto.subtle` 实现 HMAC-SHA1 |
+| 层       | 技术                             | 理由                                                                       |
+| -------- | -------------------------------- | -------------------------------------------------------------------------- |
+| 计算     | **Cloudflare Workers**           | 边缘计算，毫秒级冷启动，自带全球 CDN，零服务器运维                         |
+| 对象存储 | **Cloudflare R2**                | 与 Worker 同生态，API 兼容 S3，无出站流量费                                |
+| 数据库   | **Cloudflare D1**                | Serverless SQLite，支持 SQL 原子更新（用于下载计数扣减），自带索引优化     |
+| 前端     | **原生 HTML + CSS + JavaScript** | 单文件无构建，`fetch` + `FormData` + 动态模板，零运行时开销                |
+| 加密     | **Web Crypto API**               | Worker 运行时原生支持（SHA-256、HMAC-SHA256、AES-GCM、HKDF），无第三方依赖 |
+| 人机验证 | **Cloudflare Turnstile**         | 与 Workers 同生态，零配置，前端 widget + 后端 siteverify 双重校验          |
+| 2FA      | **TOTP (RFC 6238)**              | Google Authenticator 标准，Worker 原生 `crypto.subtle` 实现 HMAC-SHA1      |
 
 ---
 
@@ -65,16 +65,16 @@ GET  /s/:token/download    → 下载主流程（封禁 → 密码 → Turnstile
 
 共 **7 张表**，首次请求时由 `ensureSchema` 自动创建，旧库有幂等 `ALTER TABLE` 迁移：
 
-| 表 | 主键 | 核心字段 | 用途 |
-|---|---|---|---|
-| `files` | `id` | `key`, `name`, `size`, `mime` | R2 对象的元数据索引 |
-| `shares` | `id` | `file_id`, `expires_at`, `max_downloads`, `download_count`, `revoked`, `password_hash`, `password_cipher` | 分享链接。`password_cipher` 存可逆加密后的密码明文（AES-GCM），用于管理员事后查看 |
-| `download_logs` | `id` | `share_id`, `file_id`, `ip`, `browser`, `os`, `country`, `bytes`, `created_at` | 每次下载一行，用于"单 IP 重复下载检测"和流量统计 |
-| `login_logs` | `id` | `action`, `ip`, `browser`, `os`, `country`, `result`, `reason`, `created_at` | 管理员登录审计（成功 / 失败 / 限流 / 登出 / 恢复码） |
-| `turnstile_visits` | `(ip, day)` | `count` | 每 IP 每天访问次数，复合主键按天自动归零，超过阈值触发 Turnstile |
-| `banned_ips` | `ip` | `reason`, `banned_at`, `expires_at` | 自动封禁 + 到期自动解封 |
-| `settings` | `key` | `value` | 全站 KV 配置（流量限额、Turnstile、2FA 等） |
-| `traffic_stats` | `day` | `bytes`, `downloads` | 每日流量/下载汇总 |
+| 表                 | 主键        | 核心字段                                                                                                  | 用途                                                                              |
+| ------------------ | ----------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `files`            | `id`        | `key`, `name`, `size`, `mime`                                                                             | R2 对象的元数据索引                                                               |
+| `shares`           | `id`        | `file_id`, `expires_at`, `max_downloads`, `download_count`, `revoked`, `password_hash`, `password_cipher` | 分享链接。`password_cipher` 存可逆加密后的密码明文（AES-GCM），用于管理员事后查看 |
+| `download_logs`    | `id`        | `share_id`, `file_id`, `ip`, `browser`, `os`, `country`, `bytes`, `created_at`                            | 每次下载一行，用于"单 IP 重复下载检测"和流量统计                                  |
+| `login_logs`       | `id`        | `action`, `ip`, `browser`, `os`, `country`, `result`, `reason`, `created_at`                              | 管理员登录审计（成功 / 失败 / 限流 / 登出 / 恢复码）                              |
+| `turnstile_visits` | `(ip, day)` | `count`                                                                                                   | 每 IP 每天访问次数，复合主键按天自动归零，超过阈值触发 Turnstile                  |
+| `banned_ips`       | `ip`        | `reason`, `banned_at`, `expires_at`                                                                       | 自动封禁 + 到期自动解封                                                           |
+| `settings`         | `key`       | `value`                                                                                                   | 全站 KV 配置（流量限额、Turnstile、2FA 等）                                       |
+| `traffic_stats`    | `day`       | `bytes`, `downloads`                                                                                      | 每日流量/下载汇总                                                                 |
 
 **关键索引**：`idx_shares_file`、`idx_logs_share_ip`、`idx_logs_created`、`idx_login_logs_ip`、`idx_turnstile_day` —— 支撑高频查询在 D1 毫秒级响应。
 
@@ -147,14 +147,14 @@ handleDownload 执行顺序：
 
 单文件 2000+ 行，iOS 26 液态玻璃设计（毛玻璃 + 渐变球形背景 + 上升动画）。六个 Tab：
 
-| Tab | 功能 |
-|---|---|
-| 概览 | 流量图表（每日 / 每周）、下载 / 分享 / 文件计数、最近活动 |
-| 文件 | 上传（FormData 直传 Worker → R2）、删除（级联删 shares） |
-| 分享 | 列表（文件大小、有效期、密码明文显示、下载状态徽章）、创建、撤销 |
-| 日志 | 下载记录（IP / 浏览器 / OS / 国家 / 流量）、分页、搜索 |
-| 封禁 | 封禁列表 + 解封 |
-| 安全 | 登录审计日志（成功 / 失败 / 登出 / 2FA）、24h 失败告警、分页搜索 |
+| Tab  | 功能                                                                      |
+| ---- | ------------------------------------------------------------------------- |
+| 概览 | 流量图表（每日 / 每周）、下载 / 分享 / 文件计数、最近活动                 |
+| 文件 | 上传（FormData 直传 Worker → R2）、删除（级联删 shares）                  |
+| 分享 | 列表（文件大小、有效期、密码明文显示、下载状态徽章）、创建、撤销          |
+| 日志 | 下载记录（IP / 浏览器 / OS / 国家 / 流量）、分页、搜索                    |
+| 封禁 | 封禁列表 + 解封                                                           |
+| 安全 | 登录审计日志（成功 / 失败 / 登出 / 2FA）、24h 失败告警、分页搜索          |
 | 设置 | 站点标题、流量限额、单 IP 限流、2FA 开关、Turnstile 模式 / 阈值 / SiteKey |
 
 ### share.html（公开分享页）
@@ -185,12 +185,12 @@ handleDownload 执行顺序：
 
 ## 关键设计决策总结
 
-| 决策 | 理由 |
-|---|---|
-| **原生 HTML + JS，不用 React/Vue** | Worker 对包大小敏感，SPA 纯 HTML 模板 + fetch 就能搞定，省了构建链路和运行时开销 |
-| **Worker Secret 存一切敏感值** | `admin` / `turnstile_secret` / `turnstile_sitekey` / `totp_recovery` 都走 Secret，D1 只存可公开的配置和加密后的派生数据 |
-| **密码双重存储（hash + cipher）** | hash 用于验证，cipher（AES-GCM）用于管理员事后查看。换 admin secret 后 cipher 会失效，但 hash 仍可验证 |
-| **Session Cookie 而不是 JWT** | Worker 冷启动时间对加密无关，Cookie + SameSite 更适合浏览器场景 |
-| **D1 复合主键做计数器** | `turnstile_visits(ip, day)` 天然按天归零，不需要定时任务清理旧数据 |
-| **并发安全用 SQL 原子 UPDATE** | Worker 无锁，靠 SQL `WHERE download_count < max` 拦截超卖 |
-| **waitUntil 异步写日志** | 下载主流程不等待日志写完就返回响应，降低下载首字节延迟 |
+| 决策                               | 理由                                                                                                                    |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **原生 HTML + JS，不用 React/Vue** | Worker 对包大小敏感，SPA 纯 HTML 模板 + fetch 就能搞定，省了构建链路和运行时开销                                        |
+| **Worker Secret 存一切敏感值**     | `admin` / `turnstile_secret` / `turnstile_sitekey` / `totp_recovery` 都走 Secret，D1 只存可公开的配置和加密后的派生数据 |
+| **密码双重存储（hash + cipher）**  | hash 用于验证，cipher（AES-GCM）用于管理员事后查看。换 admin secret 后 cipher 会失效，但 hash 仍可验证                  |
+| **Session Cookie 而不是 JWT**      | Worker 冷启动时间对加密无关，Cookie + SameSite 更适合浏览器场景                                                         |
+| **D1 复合主键做计数器**            | `turnstile_visits(ip, day)` 天然按天归零，不需要定时任务清理旧数据                                                      |
+| **并发安全用 SQL 原子 UPDATE**     | Worker 无锁，靠 SQL `WHERE download_count < max` 拦截超卖                                                               |
+| **waitUntil 异步写日志**           | 下载主流程不等待日志写完就返回响应，降低下载首字节延迟                                                                  |

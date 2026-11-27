@@ -4,12 +4,19 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-09-01",
 
-  // 自定义域名 —— 已在控制台绑定 pan.lovlin.cn，这里显式声明，避免以后被误解除
+  // 本项目前端是「单文件无构建」：HTML 作为 Text 模块打进 Worker，
+  // 由 serveAdminPage / serveMarketPage / serveSharePage 直接返回，
+  // 没有 dist 构建产物，因此不能配 assets（配了会因为目录不存在而部署失败）。
+  // 同理 images 绑定当前代码未使用，需要图片处理时再单独启用。
+
+  "observability": { "enabled": true },
+
+  // 保留原有的 workers.dev 测试域名（不加这一行，部署后会被默认关闭）
+  "workers_dev": true,
+
   "routes": [
     { "pattern": "pan.lovlin.cn", "custom_domain": true }
   ],
-  // 保留 workers.dev 入口（配置了 routes 后默认会关掉它）
-  "workers_dev": true,
 
   // ═══════════════ 基础设施资源绑定（自动查找/创建） ═══════════════
   // 本地开发时 wrangler dev 自动创建本地实例；
@@ -35,18 +42,12 @@
   // 每次下载都会向这个 dataset 写入一个数据点，包含国家、经纬度、文件名等。
   // 绑定是可选的：没绑定时全球分布 Tab 会降级使用 D1 的 download_logs。
   // 首次部署时 Cloudflare 会自动创建这个 dataset。
-  //
-  // ⚠️ 暂时注释：账号尚未启用 Analytics Engine，带着它部署会报
-  //    [code: 10089] You need to enable Analytics Engine。
-  //    启用方式（需在控制台点同意，API 无法代劳）：
-  //    https://dash.cloudflare.com/bb3dd5f927921f429010c5c7263d794c/workers/analytics-engine
-  //    启用后把下面 6 行取消注释，再部署一次即可恢复该功能。
-  // "analytics_engine_datasets": [
-  //   {
-  //     "binding": "analytics",
-  //     "dataset": "r2pan_downloads"
-  //   }
-  // ],
+  "analytics_engine_datasets": [
+    {
+      "binding": "analytics",
+      "dataset": "r2pan_downloads"
+    }
+  ],
 
   // ═══════════════ 密钥/敏感配置（不在仓库中声明） ═══════════════
   // 本地开发：创建 .dev.vars 文件（已 .gitignore）写入 admin=你的密钥
@@ -63,6 +64,5 @@
     { "type": "Data", "globs": ["**/*.ico"], "fallthrough": true },
     // 站点图片（512x512）—— 由 /logo.png 路由返回
     { "type": "Data", "globs": ["**/*.png"], "fallthrough": true }
-  ],
-  "observability": { "enabled": true }
+  ]
 }

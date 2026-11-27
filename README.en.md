@@ -1,4 +1,4 @@
-# cloud-r2pan
+# Architecture Description
 
 A file-sharing system styled after the iOS 26 liquid-glass aesthetic, built on **Cloudflare Workers + R2 + D1**.
 Features: file uploads, share links (expiration / download limit / access password), traffic quotas, per-IP rate limiting with auto-ban, download logs, and Chinese/English localization.
@@ -9,11 +9,11 @@ Features: file uploads, share links (expiration / download limit / access passwo
 
 Worker → **Settings → Bindings**:
 
-| Binding | Type | Resource / value | Purpose |
-| --- | --- | --- | --- |
-| `r2` | R2 Bucket | `cloud-r2pan` | Stores uploaded files |
-| `db` | D1 Database | `cloud-r2pan` | Metadata, shares, logs, settings |
-| `admin` | Secret | your admin password | Admin login key |
+| Binding | Type        | Resource / value    | Purpose                          |
+| ------- | ----------- | ------------------- | -------------------------------- |
+| `r2`    | R2 Bucket   | `cloud-r2pan`       | Stores uploaded files            |
+| `db`    | D1 Database | `cloud-r2pan`       | Metadata, shares, logs, settings |
+| `admin` | Secret      | your admin password | Admin login key                  |
 
 - Worker name: `cloud-r2pan`; entry point: `src/index.ts`.
 
@@ -61,14 +61,15 @@ Database tables (`files` / `shares` / `download_logs` / `banned_ips` / `settings
 
 ## FAQ
 
-| Issue | Fix |
-| --- | --- |
-| Previous `10021` error | That came from declaring bindings inside `wrangler.jsonc`. Now bindings live on the dashboard, so `npm run deploy` needs no `database_id` |
-| Home / D1 returns 500 | Make sure the Worker's `db` (D1) binding is added and points to `cloud-r2pan` |
-| `admin` key rejected | Confirm the `admin` Secret is set and matches your input |
-| Can't find objects in R2 | Confirm the Worker's `r2` binding is added and the bucket is `cloud-r2pan` |
-| Local dev reports no binding | See "Local Development": local emulation is off by default; add bindings temporarily if needed |
-| Single-file upload size | Capped at 100 MB (Workers request body limit); rejected on the frontend |
-| Custom domain (optional) | Worker → Settings → Domains & Routes (domain must be on Cloudflare) |
+| Issue                        | Fix                                                                                                                                       |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Previous `10021` error       | That came from declaring bindings inside `wrangler.jsonc`. Now bindings live on the dashboard, so `npm run deploy` needs no `database_id` |
+| Home / D1 returns 500        | Make sure the Worker's `db` (D1) binding is added and points to `cloud-r2pan`                                                             |
+| `admin` key rejected         | Confirm the `admin` Secret is set and matches your input                                                                                  |
+| Can't find objects in R2     | Confirm the Worker's `r2` binding is added and the bucket is `cloud-r2pan`                                                                |
+| Local dev reports no binding | See "Local Development": local emulation is off by default; add bindings temporarily if needed                                            |
+| Single-file upload size      | Capped at 100 MB (Workers request body limit); rejected on the frontend                                                                   |
+| Custom domain (optional)     | Worker → Settings → Domains & Routes (domain must be on Cloudflare)                                                                       |
 
 > Manage daily: **Workers → cloud-r2pan → Console / Logs / Metrics**.
+
