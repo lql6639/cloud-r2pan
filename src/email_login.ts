@@ -70,12 +70,12 @@ export function emailLoginEnabled(env: Env): boolean {
 function codeMailHtml(code: string, ttlMin: number): string {
   return `<!doctype html><html><body style="margin:0;padding:32px;background:#f5f6f8;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif">
   <div style="max-width:460px;margin:0 auto;background:#fff;border-radius:16px;padding:32px 28px;box-shadow:0 6px 24px rgba(0,0,0,.06)">
-    <div style="font-size:15px;color:#111;font-weight:700;letter-spacing:-.01em">cloud-r2pan 管理后台</div>
+    <div style="font-size:15px;color:#111;font-weight:700;letter-spacing:-.01em">R2网盘 管理后台</div>
     <div style="font-size:13px;color:#666;margin-top:6px">登录验证码，请勿转发给任何人</div>
     <div style="margin:22px 0;text-align:center;font-size:34px;font-weight:800;letter-spacing:10px;color:#0a7cff;font-family:ui-monospace,Menlo,monospace">${code}</div>
     <div style="font-size:12.5px;color:#8a8f99;line-height:1.7">${ttlMin} 分钟内有效，仅可使用一次。<br>如果不是你本人操作，请忽略本邮件，并检查管理员密码是否泄露。</div>
   </div>
-  <div style="max-width:460px;margin:14px auto 0;text-align:center;font-size:11.5px;color:#a8adb8">Powered by cloud-r2pan</div>
+  <div style="max-width:460px;margin:14px auto 0;text-align:center;font-size:11.5px;color:#a8adb8">Powered by R2网盘</div>
 </body></html>`;
 }
 
@@ -91,7 +91,7 @@ async function sendViaResend(env: Env, to: string, code: string): Promise<{ ok: 
       body: JSON.stringify({
         from,
         to: [to],
-        subject: `cloud-r2pan 登录验证码 ${code}`,
+        subject: `R2网盘登录验证码 ${code}`,
         html: codeMailHtml(code, CODE_TTL_MS / 60000),
       }),
     });
