@@ -1004,6 +1004,8 @@ html{background:#080b18}
 body{min-height:100vh;padding:32px 20px;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Microsoft YaHei",sans-serif;
   color:#e9eef8;background:radial-gradient(120% 90% at 50% 0%,#141a33 0%,#0a0e1e 55%,#070a14 100%)}
 .wrap{max-width:400px;margin:0 auto}
+.wrap.center{min-height:calc(100vh - 64px);display:flex;align-items:center}
+.wrap.center .card{width:100%;margin:0 auto}
 .card{background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.12);border-radius:22px;padding:28px;
   box-shadow:0 18px 50px rgba(0,0,0,.42);backdrop-filter:blur(20px)}
 .brand{display:flex;align-items:center;gap:14px;margin-bottom:22px}
@@ -1040,11 +1042,11 @@ code{padding:1px 6px;border-radius:6px;background:rgba(255,255,255,.09);font-fam
 .bar button:hover{background:rgba(255,255,255,.16)}
 `;
 
-function wdPage(title: string, body: string, status = 200): Response {
+function wdPage(title: string, body: string, status = 200, centered = false): Response {
   const html = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>${escHtml(title)}</title><link rel="icon" href="/favicon.ico" type="image/x-icon">
-<style>${WD_CSS}</style></head><body><div class="wrap">${body}</div></body></html>`;
+<style>${WD_CSS}</style></head><body><div class="wrap${centered ? " center" : ""}">${body}</div></body></html>`;
   return new Response(html, {
     status,
     headers: {
@@ -1069,7 +1071,8 @@ function wdLoginPage(site: string, error?: string, status = 200): Response {
         <button type="submit">登录</button>
       </form>
     </div>`,
-    status
+    status,
+    true
   );
 }
 
