@@ -331,6 +331,10 @@ export async function handleAdminApi(
     }
     return json({
       providers,
+      // 站点标题：登录页处于未登录态，/api/admin/session 会 401，
+      // 拿不到 site_title 就只能回退到前端硬编码值（表现为"改了站点标题登录页不生效"）。
+      // 这里放在公开接口里回给登录页用。
+      site_title: s.siteTitle,
       // 邮箱验证码登录是否可用（登录页据此显示入口）。只回脱敏邮箱，不暴露完整地址。
       email_login: {
         enabled: emailLoginEnabled(env),

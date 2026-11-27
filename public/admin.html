@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>cloud-r2pan</title>
+<title>koizora</title>
 <link rel="icon" href="/favicon.ico" type="image/x-icon" sizes="any">
 <style>
 /* ═══════════════════════════════════════════════════════════
@@ -472,6 +472,9 @@ body {
 }
 .field input:focus { border-color: rgba(10,132,255,.7); background: var(--sf-input-focus); }
 .field input::placeholder { color: var(--text-3); }
+/* 6 位验证码输入框：数字等宽居中，但占位提示不能被字距拉开 */
+.otp-input { text-align: center; letter-spacing: .4em; font-size: 18px; }
+.otp-input::placeholder { letter-spacing: normal; font-size: 14px; }
 .field .tip { margin-top: 6px; font-size: 12px; color: var(--text-3); line-height: 1.5; }
 
 /* ── iOS 分组设置列表 ─────────────────── */
@@ -825,7 +828,7 @@ const I18N = {
     login2faPh: '6 位验证码',
     login2faCode: '验证码',
     login2faUseRecovery: '使用恢复码',
-    login2faBack: '← 返回',
+    login2faBack: '返回',
     login2faRecoveryPh: '16 位恢复码（空格可选）',
     login2faRecoveryHint: '如果 Authenticator 丢失，可以输入恢复码登录并自动关闭 2FA',
     login2faRecoveryOk: '恢复码验证成功，2FA 已自动重置',
@@ -1780,12 +1783,20 @@ function enabledProviderSig(am){
 
 async function loadAuthMethods(){
   const prevSig = enabledProviderSig(authMethods);
+  const prevTitle = siteTitle;
   try{
     const r = await fetch('/api/admin/auth-methods', { credentials:'same-origin', cache:'no-store' });
-    if(r.ok) authMethods = await r.json();
+    if(r.ok){
+      const d = await r.json();
+      authMethods = d;
+      // 登录页是未登录态，/api/admin/session 会 401 拿不到 site_title，
+      // 所以站点标题由这个公开接口提供，否则会一直显示前端硬编码的默认值。
+      if(d.site_title){ siteTitle = d.site_title; document.title = t('docTitle', {site: siteTitle}); }
+    }
   }catch{}
-  // 仅当可用状态发生变化时才重渲染，避免把用户已输入的管理密钥清空
-  if(prevSig !== enabledProviderSig(authMethods) && document.querySelector('#login-view') && loginStage === 'password') showLogin();
+  // 仅当可用状态/标题变化时才重渲染，避免把用户已输入的管理密钥清空
+  const changed = prevSig !== enabledProviderSig(authMethods) || prevTitle !== siteTitle;
+  if(changed && document.querySelector('#login-view') && loginStage === 'password') showLogin();
 }
 
 /**
@@ -1970,7 +1981,7 @@ function showLogin(){
       <h1>${esc(t('login2faTitle'))}</h1>
       <div class="sub">${esc(t('login2faSub'))}</div>
       <form id="login-form">
-        <input type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" id="login-code" placeholder="${esc(t('login2faPh'))}" autocomplete="one-time-code" autofocus style="text-align:center;letter-spacing:.4em;font-size:20px">
+        <input type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" id="login-code" placeholder="${esc(t('login2faPh'))}" autocomplete="one-time-code" autofocus class="otp-input">
         <button class="btn primary" type="submit">${esc(t('login2faCode'))}</button>
         <div class="err" id="login-err"></div>
       </form>
@@ -1995,7 +2006,7 @@ function showLogin(){
       <h1>${esc(t('login2faTitle'))}</h1>
       <div class="sub">${esc(t('login2faSub'))}</div>
       <form id="login-form">
-        <input type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" id="login-code" placeholder="${esc(t('login2faPh'))}" autocomplete="one-time-code" autofocus style="text-align:center;letter-spacing:.4em;font-size:20px">
+        <input type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" id="login-code" placeholder="${esc(t('login2faPh'))}" autocomplete="one-time-code" autofocus class="otp-input">
         <button class="btn primary" type="submit">${esc(t('login2faCode'))}</button>
         <div class="err" id="login-err"></div>
       </form>
@@ -5137,16 +5148,16 @@ async function loadSettings(){
           <input readonly value="${esc(r.secret)}" style="width:100%;padding:10px 12px;border-radius:10px;font-family:ui-monospace,'SF Mono',monospace;font-size:13px;color:var(--blue);background:rgba(0,0,0,.3);border:1px solid var(--stroke)" onclick="this.select()">
         </div>
         <div class="field" style="margin:12px 0">
-          <input type="text" id="2fa-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="${esc(t('twofaSetupCodePh'))}" style="text-align:center;letter-spacing:.4em;font-size:18px">
+          <input type="text" id="totp-setup-code" class="otp-input" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="${esc(t('twofaSetupCodePh'))}">
         </div>
         <div class="actions">
           <button class="btn" data-x>${esc(t('cancel'))}</button>
-          <button class="btn primary" id="2fa-enable">${esc(t('confirm'))}</button>
+          <button class="btn primary" id="totp-setup-enable">${esc(t('confirm'))}</button>
         </div>
       `);
       $('[data-x]').onclick = closeModal;
-      $('#2fa-enable').onclick = async () => {
-        const code = $('#2fa-code').value.trim();
+      $('#totp-setup-enable').onclick = async () => {
+        const code = $('#totp-setup-code').value.trim();
         if(!/^\d{6}$/.test(code)) return;
         try{
           const en = await api('/api/admin/2fa/enable', { method:'POST', body: JSON.stringify({ admin_key: adminKey, code, secret: r.secret }) });
