@@ -31,6 +31,7 @@ import {
   handleOAuthProviders,
 } from './oauth_handlers'
 import { handleAdminOauthStart, handleAdminOauthCallback } from './admin_oauth'
+import { handleEmailCodeSend, handleEmailCodeLogin } from './email_login'
 import {
   findCodeByString,
   formatCodeStatus,
@@ -214,6 +215,16 @@ async function route(
   if (path === '/admin/oauth/callback' && req.method === 'GET') {
     await ensureSchema(env)
     return handleAdminOauthCallback(req, env)
+  }
+
+  // 管理员邮箱验证码登录（必须在 /api/admin/ 通配之前，否则会被 handleAdminApi 接走）
+  if (path === '/api/admin/email/send' && req.method === 'POST') {
+    await ensureSchema(env)
+    return handleEmailCodeSend(req, env, ctx)
+  }
+  if (path === '/api/admin/email/login' && req.method === 'POST') {
+    await ensureSchema(env)
+    return handleEmailCodeLogin(req, env, ctx)
   }
 
   // 管理 API

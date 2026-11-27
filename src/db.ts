@@ -193,6 +193,19 @@ const SCHEMA_STATEMENTS: string[] = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_error_logs_created ON error_logs(created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_error_logs_source ON error_logs(source)`,
+  // 邮箱验证码登录（管理员专用，见 src/email_login.ts）
+  // 只存 HMAC 哈希，不存明文验证码；attempts 限制爆破，used 保证一次性
+  `CREATE TABLE IF NOT EXISTS email_login_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    code_hash TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    used INTEGER NOT NULL DEFAULT 0,
+    ip TEXT,
+    created_at INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_email_codes_email ON email_login_codes(email, created_at)`,
 ];
 
 /** 所有预期的业务表 —— 自动建表 & 升级时都要检查 */
@@ -200,7 +213,7 @@ export const EXPECTED_TABLES = [
   "files", "shares", "direct_links", "download_logs", "login_logs",
   "turnstile_visits", "banned_ips", "settings", "traffic_stats",
   "oauth_states", "oauth_providers", "activation_plans", "activation_codes",
-  "directories", "error_logs", "upload_sessions",
+  "directories", "error_logs", "upload_sessions", "email_login_codes",
 ];
 
 let schemaReady = false;

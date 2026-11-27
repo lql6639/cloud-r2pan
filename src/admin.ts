@@ -10,6 +10,18 @@ import { encryptSecret, decryptSecret, totpGenerateSecret, totpVerify, totpUri, 
 import { createStorageProvider, type StorageProvider } from "./storage";
 import { buildAdminOauthAuthorizeUrl, ADMIN_OAUTH_INTENT_BIND, isAdminOauthProvider, adminOauthCallbackUrl } from "./admin_oauth";
 import { getBuiltinProvider } from "./oauth";
+import { emailLoginEnabled } from "./email_login";
+
+/** 邮箱脱敏：1740242084@qq.com → 17****84@qq.com */
+function maskEmail(email?: string): string {
+  const v = (email ?? "").trim();
+  const at = v.indexOf("@");
+  if (at <= 0) return "";
+  const name = v.slice(0, at);
+  const domain = v.slice(at);
+  if (name.length <= 4) return "*" + domain;
+  return name.slice(0, 2) + "*".repeat(Math.min(6, name.length - 4)) + name.slice(-2) + domain;
+}
 
 /** 懒加载 StorageProvider —— 每次需要时从 settings 构造（settings 有 5s 缓存，成本低） */
 let _storagePromise: Promise<StorageProvider> | null = null;
@@ -317,7 +329,14 @@ export async function handleAdminApi(
         enabled: p.enabled && !!p.uid && !!p.clientId && !!p.secretCipher,
       };
     }
-    return json({ providers });
+    return json({
+      providers,
+      // 邮箱验证码登录是否可用（登录页据此显示入口）。只回脱敏邮箱，不暴露完整地址。
+      email_login: {
+        enabled: emailLoginEnabled(env),
+        masked: maskEmail(env.ADMIN_EMAIL),
+      },
+    });
   }
 
   // ── 错误日志上报（公开，无需会话）─────────────────────
@@ -436,7 +455,14 @@ export async function handleAdminApi(
         callback_url: callbackUrl,
       };
     });
-    return json({ providers });
+    return json({
+      providers,
+      // 邮箱验证码登录是否可用（只回脱敏邮箱，避免把管理员邮箱公开在登录页）
+      email_login: {
+        enabled: emailLoginEnabled(env),
+        masked: maskEmail(env.ADMIN_EMAIL),
+      },
+    });
   }
 
   if (path === "/api/admin/login-methods" && method === "PUT") {

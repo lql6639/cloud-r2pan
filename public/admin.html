@@ -1606,7 +1606,7 @@ async function api(path, opts={}){
   let data = null;
   try { data = await r.json(); } catch {}
   if(r.status === 401 && !path.includes('/login')) { showLogin(); throw new Error('unauthorized'); }
-  if(!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
+  if(!r.ok) throw new Error(data?.message || data?.error || `HTTP ${r.status}`);
   return data;
 }
 
@@ -1733,7 +1733,8 @@ function closeModal(){ $('#modal')?.remove(); }
 
 /* ═══════════ 登录视图（支持 2FA 两阶段） ═══════════ */
 let siteTitle = 'cloud-r2pan';
-let loginStage = 'password'; // 'password' | '2fa' | 'recovery'
+let loginStage = 'password'; // 'password' | '2fa' | 'recovery' | 'email' | 'email2fa'
+let pendingEmail = '', pendingEmailCode = ''; // 邮箱验证码通过后若还需 2FA，暂存以便二次提交
 let savedLoginKey = ''; // 第一阶段输入的 admin key
 /** 支持的管理员第三方登录方式（顺序即前端展示顺序） */
 const ADMIN_PROVIDERS = [
@@ -1758,7 +1759,7 @@ let authMethods = { providers: {} };
 /** 已启用登录方式的签名，用于判断是否需要重渲染登录页 */
 function enabledProviderSig(am){
   const p = am?.providers || {};
-  return ADMIN_PROVIDERS.map(x => x.id + (p[x.id]?.enabled ? '1' : '0')).join(',');
+  return ADMIN_PROVIDERS.map(x => x.id + (p[x.id]?.enabled ? '1' : '0')).join(',') + (am?.email_login?.enabled ? '|E' : '');
 }
 
 async function loadAuthMethods(){
@@ -1854,6 +1855,10 @@ function showLogin(){
             </a>`).join('')}
         </div>
       </div>` : ''}
+      ${authMethods.email_login?.enabled ? `
+      <div style="margin-top:12px">
+        <button class="btn sm" id="login-email-mode" style="width:100%">使用邮箱验证码登录</button>
+      </div>` : ''}
       <div class="lang-row"><button class="btn sm" id="login-lang">${esc(t('switchTo'))}</button></div>
     `);
     $('#login-form').onsubmit = async e => {
@@ -1881,6 +1886,94 @@ function showLogin(){
       a.addEventListener('click', () => { location.href = '/admin/oauth/' + a.dataset.oauthProvider + '/start'; });
     });
     $('#login-lang').onclick = toggleLang;
+    $('#login-email-mode')?.addEventListener('click', () => { loginStage = 'email'; showLogin(); });
+  } else if(loginStage === 'email'){
+    /* ── 邮箱验证码登录 ── */
+    renderLoginCard(`
+      <h1>${esc(siteTitle)}</h1>
+      <div class="sub">验证码将发送至 ${esc(authMethods.email_login?.masked || '管理员邮箱')}</div>
+      <form id="login-form">
+        <input type="email" id="email-input" placeholder="管理员邮箱" autocomplete="username" autofocus>
+        <div style="display:flex;gap:8px;align-items:stretch">
+          <input type="text" inputmode="numeric" maxlength="6" id="email-code" placeholder="6 位验证码"
+                 autocomplete="one-time-code" style="flex:1 1 0;min-width:0;width:auto;text-align:center;letter-spacing:.3em">
+          <button class="btn sm" type="button" id="email-send" style="flex:0 0 auto;width:auto;white-space:nowrap;padding:0 14px">获取验证码</button>
+        </div>
+        <button class="btn primary" type="submit">登录</button>
+        <div class="err" id="login-err"></div>
+      </form>
+      <div style="margin-top:14px"><button class="btn sm" id="login-back">${esc(t('login2faBack'))}</button></div>
+    `);
+    const sendBtn = $('#email-send');
+    let countdown = 0, timer = null;
+    const tick = () => {
+      if(countdown <= 0){ clearInterval(timer); sendBtn.disabled = false; sendBtn.textContent = '获取验证码'; return; }
+      sendBtn.disabled = true; sendBtn.textContent = countdown + 's';
+      countdown--;
+    };
+    sendBtn.onclick = async () => {
+      const email = ($('#email-input').value || '').trim();
+      if(!email) { $('#login-err').textContent = '请先填写邮箱'; return; }
+      $('#login-err').textContent = '';
+      sendBtn.disabled = true; sendBtn.textContent = '发送中…';
+      try{
+        const r = await api('/api/admin/email/send', { method:'POST', body: JSON.stringify({ email }) });
+        $('#login-err').style.color = 'var(--ok, #34c759)';
+        $('#login-err').textContent = r.message || '验证码已发送';
+        $('#email-code').focus();
+        countdown = 60; clearInterval(timer); timer = setInterval(tick, 1000); tick();
+      }catch(err){
+        $('#login-err').style.color = '';
+        $('#login-err').textContent = err.message;
+        sendBtn.disabled = false; sendBtn.textContent = '获取验证码';
+      }
+    };
+    $('#login-form').onsubmit = async e => {
+      e.preventDefault();
+      const email = ($('#email-input').value || '').trim();
+      const code = ($('#email-code').value || '').trim();
+      if(!/^\d{6}$/.test(code)){ $('#login-err').textContent = '请输入 6 位数字验证码'; return; }
+      $('#login-err').textContent = '';
+      try{
+        const r = await api('/api/admin/email/login', { method:'POST', body: JSON.stringify({ email, code }) });
+        if(r.need_2fa){
+          pendingEmail = email; pendingEmailCode = code;
+          loginStage = 'email2fa'; showLogin();
+        }else{
+          showApp();
+        }
+      }catch(err){
+        $('#login-err').textContent = err.message;
+        shake();
+      }
+    };
+    $('#login-back').onclick = () => { loginStage = 'password'; showLogin(); };
+  } else if(loginStage === 'email2fa'){
+    /* ── 邮箱验证码 + TOTP 两步 ── */
+    renderLoginCard(`
+      <h1>${esc(t('login2faTitle'))}</h1>
+      <div class="sub">${esc(t('login2faSub'))}</div>
+      <form id="login-form">
+        <input type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" id="login-code" placeholder="${esc(t('login2faPh'))}" autocomplete="one-time-code" autofocus style="text-align:center;letter-spacing:.4em;font-size:20px">
+        <button class="btn primary" type="submit">${esc(t('login2faCode'))}</button>
+        <div class="err" id="login-err"></div>
+      </form>
+      <div style="margin-top:14px"><button class="btn sm" id="login-back">${esc(t('login2faBack'))}</button></div>
+    `);
+    $('#login-form').onsubmit = async e => {
+      e.preventDefault();
+      const totp = ($('#login-code').value || '').trim();
+      if(!/^\d{6}$/.test(totp)) return;
+      $('#login-err').textContent = '';
+      try{
+        await api('/api/admin/email/login', { method:'POST', body: JSON.stringify({ email: pendingEmail, code: pendingEmailCode, totp }) });
+        showApp();
+      }catch(err){
+        $('#login-err').textContent = err.message;
+        shake();
+      }
+    };
+    $('#login-back').onclick = () => { loginStage = 'email'; showLogin(); };
   } else if(loginStage === '2fa'){
     renderLoginCard(`
       <h1>${esc(t('login2faTitle'))}</h1>

@@ -14,6 +14,16 @@ export interface Env {
    * 没绑定时全球分布 Tab 会降级使用 D1 的 download_logs（只存 country，无经纬度）。
    */
   analytics?: AnalyticsEngineDataset;
+  /**
+   * 可选：管理员邮箱验证码登录。
+   *   ADMIN_EMAIL  —— 唯一允许登录的邮箱（白名单，非它一律拒发）
+   *   RESEND_API_KEY —— Resend 发信密钥（Secret）
+   *   MAIL_FROM   —— 发件人，如 "cloud-r2pan <noreply@lovlin.cn>"
+   * 三者齐备才会在登录页显示「邮箱验证码登录」入口。
+   */
+  ADMIN_EMAIL?: string;
+  RESEND_API_KEY?: string;
+  MAIL_FROM?: string;
 }
 
 export interface ShareRow {
