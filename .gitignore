@@ -9,3 +9,6 @@ dist/
 # 本地密钥，绝不入库
 .dev.vars
 .env
+
+# 本地工作笔记（WorkBuddy 项目记忆），不入库
+.workbuddy/
