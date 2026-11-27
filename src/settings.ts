@@ -295,7 +295,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // 下载市场
   homeRedirectMarket: false,
   // 激活码浮动按钮
-  codesFloatingButtonEnabled: true,
+  codesFloatingButtonEnabled: false,
   codesFloatingButtonPosition: "top-right",
   // 管理员第三方 OAuth2 登录 —— 默认全部未配置、未绑定
   adminOauth: "",
@@ -420,7 +420,7 @@ export async function getSettings(env: Env): Promise<Settings> {
     adminPasswordHash: map.get("admin_password_hash") ?? null,
     homeRedirectMarket: map.get("home_redirect_market") === "1",
     // 激活码浮动按钮
-    codesFloatingButtonEnabled: map.get("codes_floating_button_enabled") !== "0", // 默认 true
+    codesFloatingButtonEnabled: map.get("codes_floating_button_enabled") === "1", // 默认 false
     codesFloatingButtonPosition: (map.get("codes_floating_button_position") ?? DEFAULT_SETTINGS.codesFloatingButtonPosition) as Settings["codesFloatingButtonPosition"],
     // 管理员第三方 OAuth2 登录
     adminOauth,

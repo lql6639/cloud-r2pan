@@ -845,7 +845,7 @@ const I18N = {
     homeRedirectMarketHint: '默认关闭。开启后，您的站点首页就是下载市场，普通访客无法直接看到 /admin。管理员仍然可以通过 /admin 显式访问后台。',
     codesFloatingBtn: '🎟️ 激活码浮动按钮',
     codesFloatingBtnD: '在分享页右上角（或左上角）显示一个卡片图标，用户点击后可绑定激活码、查询额度、解绑',
-    codesFloatingBtnHint: '默认开启。关闭后用户只能通过 URL 参数 ?code=XXX 携带激活码（不推荐）',
+    codesFloatingBtnHint: '默认关闭。开启后用户可通过卡片按钮使用激活码；关闭后只能通过 URL 参数 ?code=XXX 携带激活码（不推荐）',
     codesFloatingBtnPosition: '按钮位置',
     codesFloatingBtnPosRight: '右上角',
     codesFloatingBtnPosLeft: '左上角',
@@ -1302,7 +1302,7 @@ const I18N = {
     homeRedirectMarketHint: 'Off by default. When enabled, your site homepage becomes the marketplace. Admins can still reach /admin explicitly.',
     codesFloatingBtn: '🎟️ Activation Code Floating Button',
     codesFloatingBtnD: 'Show a card icon on the share page corner. Users can bind/unbind their code and check balance by clicking it.',
-    codesFloatingBtnHint: 'On by default. When off, users can only use activation codes via the URL parameter ?code=XXX (not recommended).',
+    codesFloatingBtnHint: 'Off by default. When on, users can use codes via the floating button; when off, only via the URL parameter ?code=XXX (not recommended).',
     codesFloatingBtnPosition: 'Position',
     codesFloatingBtnPosRight: 'Top right',
     codesFloatingBtnPosLeft: 'Top left',
@@ -4541,12 +4541,13 @@ async function loadSettings(){
       <div class="row">
         <div class="info"><div class="t">🎟️ ${esc(t('codesFloatingBtn'))}</div><div class="d">${esc(t('codesFloatingBtnD'))}</div></div>
         <label class="switch">
-          <input type="checkbox" id="st-codes-float" ${s.codes_floating_button_enabled !== false ? 'checked' : ''}>
+          <input type="checkbox" id="st-codes-float" ${s.codes_floating_button_enabled ? 'checked' : ''}>
           <span class="track"><span class="thumb"></span></span>
         </label>
       </div>
+      <div class="tip" style="margin-top:8px">${esc(t('codesFloatingBtnHint'))}</div>
       <div class="row">
-        <div class="info"><div class="t">${esc(t('codesFloatingBtnPosition'))}</div><div class="d">${esc(t('codesFloatingBtnHint'))}</div></div>
+        <div class="info"><div class="t">${esc(t('codesFloatingBtnPosition'))}</div></div>
         <select id="st-codes-pos" style="padding:9px 14px;border-radius:12px;background:var(--sf-input);border:1px solid var(--stroke-strong);color:var(--text);font-size:14px;font-family:inherit;outline:none;min-width:110px">
           <option value="top-right" ${(s.codes_floating_button_position || 'top-right') === 'top-right' ? 'selected' : ''}>${esc(t('codesFloatingBtnPosRight'))}</option>
           <option value="top-left" ${s.codes_floating_button_position === 'top-left' ? 'selected' : ''}>${esc(t('codesFloatingBtnPosLeft'))}</option>

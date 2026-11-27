@@ -1003,7 +1003,7 @@ const WD_CSS = `
 html{background:#080b18}
 body{min-height:100vh;padding:32px 20px;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Microsoft YaHei",sans-serif;
   color:#e9eef8;background:radial-gradient(120% 90% at 50% 0%,#141a33 0%,#0a0e1e 55%,#070a14 100%)}
-.wrap{max-width:760px;margin:0 auto}
+.wrap{max-width:400px;margin:0 auto}
 .card{background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.12);border-radius:22px;padding:28px;
   box-shadow:0 18px 50px rgba(0,0,0,.42);backdrop-filter:blur(20px)}
 .brand{display:flex;align-items:center;gap:14px;margin-bottom:22px}
@@ -1068,8 +1068,6 @@ function wdLoginPage(site: string, error?: string, status = 200): Response {
         ${error ? `<div class="err">${escHtml(error)}</div>` : ""}
         <button type="submit">登录</button>
       </form>
-      <p class="hint">这是浏览器访问界面。用 Finder / nPlayer 等 WebDAV 客户端连接时，地址填
-        <code>https://pan.lovlin.cn/webdav/</code>，用户名密码与这里相同。</p>
     </div>`,
     status
   );
