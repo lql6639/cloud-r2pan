@@ -37,17 +37,12 @@
   // 每次下载都会向这个 dataset 写入一个数据点，包含国家、经纬度、文件名等。
   // 绑定是可选的：没绑定时全球分布 Tab 会降级使用 D1 的 download_logs。
   // 首次部署时 Cloudflare 会自动创建这个 dataset。
-  //
-  // ⚠️ 账号尚未启用 Analytics Engine（2026-11-27 12:50 验证仍报 code 10089），
-  //    带着此绑定部署会直接失败。启用入口（需在控制台点同意，API 无法代劳）：
-  //    https://dash.cloudflare.com/bb3dd5f927921f429010c5c7263d794c/workers/analytics-engine
-  //    启用后把下面 6 行取消注释再部署即可恢复（代码侧已就绪，`if (env.analytics)`）。
-  // "analytics_engine_datasets": [
-  //   {
-  //     "binding": "analytics",
-  //     "dataset": "r2pan_downloads"
-  //   }
-  // ],
+  "analytics_engine_datasets": [
+    {
+      "binding": "analytics",
+      "dataset": "r2pan_downloads"
+    }
+  ],
 
   // ═══════════════ 密钥/敏感配置（不在仓库中声明） ═══════════════
   // 本地开发：创建 .dev.vars 文件（已 .gitignore）写入 admin=你的密钥
