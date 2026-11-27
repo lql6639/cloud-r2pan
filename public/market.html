@@ -8,16 +8,20 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{min-height:100%}
+html{background:#080b18}
+/* 随机风景背景：JS 注入 --bg-photo，固定图层 + 半透明遮罩保证文字可读 */
+body::before{content:"";position:fixed;inset:0;z-index:-2;background-image:var(--bg-photo,none);
+  background-size:cover;background-position:center center;background-repeat:no-repeat;
+  transition:opacity .5s ease}
+body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:
+    radial-gradient(120% 90% at 50% 0%,rgba(8,11,24,.42) 0%,rgba(8,11,24,.72) 55%,rgba(8,11,24,.9) 100%),
+    linear-gradient(180deg,rgba(8,11,24,.5) 0%,rgba(8,11,24,.7) 100%)}
 body{
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif;
-  color:#fff;background:linear-gradient(160deg,#0b1026 0%,#1a1240 45%,#2a1045 100%);
+  color:#fff;background:transparent;
   padding:24px 20px 80px;min-height:100vh;position:relative;overflow-x:hidden;
 }
-.orb{position:fixed;border-radius:50%;filter:blur(90px);opacity:.5;pointer-events:none;animation:drift 18s ease-in-out infinite alternate}
-.o1{width:46vmax;height:46vmax;background:#38bdf8;top:-18%;left:-14%}
-.o2{width:40vmax;height:40vmax;background:#8b5cf6;bottom:-20%;right:-10%;animation-delay:-6s}
-.o3{width:30vmax;height:30vmax;background:#ec4899;top:55%;left:8%;animation-delay:-12s;opacity:.35}
-@keyframes drift{from{transform:translate(0,0) scale(1)}to{transform:translate(6vw,-5vh) scale(1.12)}}
 
 .container{max-width:1200px;margin:0 auto;position:relative;z-index:1}
 header{margin-bottom:32px;animation:rise .5s cubic-bezier(.22,1.2,.36,1) both}
@@ -108,7 +112,7 @@ footer a{color:rgba(56,189,248,.8);text-decoration:none}
 </style>
 </head>
 <body>
-<div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+
 <div class="container">
   <header>
     <div class="brand">
@@ -167,7 +171,7 @@ const I18N = {
     statsTotalSuffix: '个资源',
     statsPerpagePrefix: '每页',
     statsPerpageSuffix: '条',
-    footerText: 'Powered by cloud-r2pan · <a href="/admin">管理后台</a>',
+    footerText: 'Powered by koizora · <a href="/admin">管理后台</a>',
     switchTo: 'EN',
     loading: '加载中…',
     loadFailTitle: '加载失败',
@@ -206,7 +210,7 @@ const I18N = {
     statsTotalSuffix: 'resources',
     statsPerpagePrefix: '',
     statsPerpageSuffix: 'per page',
-    footerText: 'Powered by cloud-r2pan · <a href="/admin">Admin</a>',
+    footerText: 'Powered by koizora · <a href="/admin">Admin</a>',
     switchTo: '中文',
     loading: 'Loading…',
     loadFailTitle: 'Failed to load',
@@ -424,6 +428,14 @@ sortSel.addEventListener("change", () => { state.sort = sortSel.value; state.pag
 function renderEmpty(emoji, title, desc){
   grid.innerHTML = `<div class="empty"><div class="emoji">${escapeHtml(emoji)}</div><h3>${escapeHtml(title)}</h3><p>${escapeHtml(desc)}</p></div>`;
 }
+
+/* 随机背景：每次加载换一张；带时间戳 + 随机串，绕过浏览器与 CDN 缓存 */
+(function randomBg(){
+  const u = 'https://t.alcy.cc/pc?r=' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  const img = new Image();
+  img.onload = () => document.body.style.setProperty('--bg-photo', 'url("' + u + '")');
+  img.src = u;
+})();
 
 // 初始
 load();

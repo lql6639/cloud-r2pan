@@ -18,7 +18,7 @@
 
 import type { Env } from "./types";
 import { getSettings } from "./settings";
-import { sha256Hex, safeEqual, randomHex } from "./crypto";
+import { sha256Hex, safeEqual, hmacB64url, randomHex } from "./crypto";
 import { createStorageProvider, type StorageProvider } from "./storage";
 import { randomId } from "./db";
 
@@ -97,17 +97,30 @@ async function checkWebDAVAuth(req: Request, env: Env): Promise<boolean> {
   if (!settings.webdavEnabled) return false;
   if (!settings.webdavPasswordHash) return false;
 
+  // ① WebDAV 客户端：Authorization: Basic xxx
   const auth = parseBasicAuth(req.headers.get("authorization"));
-  if (!auth) return false;
-  if (auth.username !== settings.webdavUsername) return false;
+  if (auth) {
+    return verifyWebDAVCreds(settings, auth.username, auth.password);
+  }
 
-  // 密码校验：salt:sha256(salt:password)
+  // ② 浏览器：网页登录后下发的 Cookie（避免浏览器弹原生认证框）
+  return verifyWebDAVCookie(req, env, settings);
+}
+
+/** 校验用户名 + 密码（salt:sha256 形式存储在 settings 中） */
+async function verifyWebDAVCreds(
+  settings: { webdavUsername?: string | null; webdavPasswordHash?: string | null },
+  username: string,
+  password: string
+): Promise<boolean> {
+  if (username !== settings.webdavUsername) return false;
   const stored = settings.webdavPasswordHash;
+  if (!stored) return false;
   const i = stored.indexOf(":");
   if (i < 0) return false;
   const salt = stored.slice(0, i);
   const want = stored.slice(i + 1);
-  const got = await sha256Hex(salt + ":" + auth.password);
+  const got = await sha256Hex(salt + ":" + password);
   return safeEqual(want, got);
 }
 
@@ -331,6 +344,21 @@ export async function handleWebDAV(
   const url = new URL(req.url);
   const method = req.method.toUpperCase();
   const internalPath = extractInternalPath(url.pathname);
+
+  // 0. 浏览器网页登录 / 登出（不走 Basic Auth，避免弹出原生认证框）
+  if (url.pathname === "/webdav/_login" && method === "POST") {
+    return handleWebDavWebLogin(req, env);
+  }
+  if (url.pathname === "/webdav/_logout" && method === "POST") {
+    return new Response(null, {
+      status: 302,
+      headers: { location: "/webdav/", "set-cookie": clearWebDavCookie(), "cache-control": "no-store" },
+    });
+  }
+  // 浏览器直接访问（Accept 含 text/html）→ 给网页界面；WebDAV 客户端不带该头，继续走协议
+  if ((method === "GET" || method === "HEAD") && (req.headers.get("accept") ?? "").includes("text/html")) {
+    return handleWebDavBrowser(req, env, internalPath);
+  }
 
   // 1. OPTIONS —— 不强制认证（让客户端先探测能力）
   if (method === "OPTIONS") {
@@ -902,4 +930,243 @@ async function moveDirectory(env: Env, srcDir: string, destDir: string): Promise
   await env.db.prepare("DELETE FROM directories WHERE path = ?1").bind(srcDir).run();
   await env.db.prepare("INSERT INTO directories(path, created_at) VALUES(?1, ?2) ON CONFLICT(path) DO NOTHING")
     .bind(destDir, Date.now()).run();
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * 浏览器网页界面 —— 登录页 + 目录浏览
+ * 只拦截 Accept: text/html 的 GET；WebDAV 客户端不带 text/html，仍走 Basic Auth。
+ * 网页登录成功下发 HMAC 签名 Cookie，避免浏览器弹原生认证框。
+ * ═══════════════════════════════════════════════════════════ */
+
+const WD_COOKIE = "wd_auth";
+const WD_TTL_MS = 7 * 24 * 3600 * 1000;
+
+function parseCookies(header: string | null): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!header) return out;
+  for (const part of header.split(";")) {
+    const i = part.indexOf("=");
+    if (i < 0) continue;
+    out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+  }
+  return out;
+}
+
+async function wdCookieSig(env: Env, settings: any, exp: number): Promise<string> {
+  const fp = (settings.webdavPasswordHash ?? "").slice(0, 12);
+  return hmacB64url(env.admin, `wd:${settings.webdavUsername ?? ""}:${fp}:${exp}`);
+}
+
+async function buildWebDavCookie(req: Request, env: Env, settings: any): Promise<string> {
+  const exp = Date.now() + WD_TTL_MS;
+  const sig = await wdCookieSig(env, settings, exp);
+  const secure = new URL(req.url).protocol === "https:" ? "; Secure" : "";
+  return `${WD_COOKIE}=${exp}.${sig}; Path=/webdav; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(WD_TTL_MS / 1000)}${secure}`;
+}
+
+function clearWebDavCookie(): string {
+  return `${WD_COOKIE}=; Path=/webdav; HttpOnly; SameSite=Lax; Max-Age=0`;
+}
+
+/** Cookie 会话校验：签名 + 过期；密码变更后指纹变化，旧 Cookie 自动失效 */
+async function verifyWebDAVCookie(req: Request, env: Env, settings: any): Promise<boolean> {
+  const raw = parseCookies(req.headers.get("cookie"))[WD_COOKIE];
+  if (!raw) return false;
+  const i = raw.indexOf(".");
+  if (i < 0) return false;
+  const exp = Number(raw.slice(0, i));
+  const sig = raw.slice(i + 1);
+  if (!Number.isFinite(exp) || exp < Date.now()) return false;
+  return safeEqual(sig, await wdCookieSig(env, settings, exp));
+}
+
+function escHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!)
+  );
+}
+
+function fmtSize(n: number): string {
+  if (!n) return "-";
+  const u = ["B", "KB", "MB", "GB", "TB"];
+  let i = 0;
+  let v = n;
+  while (v >= 1024 && i < u.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v.toFixed(v >= 100 || i === 0 ? 0 : 1)} ${u[i]}`;
+}
+
+const WD_CSS = `
+*{margin:0;padding:0;box-sizing:border-box}
+html{background:#080b18}
+body{min-height:100vh;padding:32px 20px;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Microsoft YaHei",sans-serif;
+  color:#e9eef8;background:radial-gradient(120% 90% at 50% 0%,#141a33 0%,#0a0e1e 55%,#070a14 100%)}
+.wrap{max-width:760px;margin:0 auto}
+.card{background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.12);border-radius:22px;padding:28px;
+  box-shadow:0 18px 50px rgba(0,0,0,.42);backdrop-filter:blur(20px)}
+.brand{display:flex;align-items:center;gap:14px;margin-bottom:22px}
+.logo{width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;
+  background:linear-gradient(145deg,rgba(255,255,255,.2),rgba(255,255,255,.05));border:1px solid rgba(255,255,255,.22)}
+h1{font-size:21px;font-weight:700;letter-spacing:-.01em}
+.brand p{font-size:12.5px;color:#8b95ad;margin-top:3px}
+label{display:block;font-size:12.5px;color:#9aa4bb;margin:14px 0 6px}
+input{width:100%;padding:13px 15px;border-radius:14px;font-size:15px;font-family:inherit;color:#e9eef8;
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);outline:none}
+input:focus{border-color:rgba(70,150,255,.75);background:rgba(255,255,255,.1)}
+button{margin-top:20px;width:100%;padding:13px;border-radius:14px;border:none;cursor:pointer;font-size:15px;font-weight:600;
+  color:#fff;background:linear-gradient(180deg,#3d9bff,#0a7cff);box-shadow:0 8px 22px rgba(10,124,255,.35)}
+button:hover{filter:brightness(1.06)}
+.err{margin-top:12px;font-size:13px;color:#ff9688}
+.hint{margin-top:18px;font-size:12px;line-height:1.75;color:#7b859d}
+code{padding:1px 6px;border-radius:6px;background:rgba(255,255,255,.09);font-family:ui-monospace,Menlo,monospace;font-size:11.5px}
+.crumb{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px;color:#9aa4bb;margin-bottom:16px}
+.crumb a{color:#6fb2ff;text-decoration:none}
+.crumb a:hover{text-decoration:underline}
+.list{margin-top:6px;border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,.1)}
+.row{display:flex;align-items:center;gap:12px;padding:12px 15px;font-size:14px;border-bottom:1px solid rgba(255,255,255,.07)}
+.row:last-child{border-bottom:none}
+.row:hover{background:rgba(255,255,255,.05)}
+.row a{flex:1;color:#e9eef8;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row a:hover{color:#6fb2ff}
+.ico{width:22px;text-align:center;flex:none;font-size:16px}
+.meta{flex:none;color:#7b859d;font-size:12px}
+.empty{padding:28px;text-align:center;color:#7b859d;font-size:13px}
+.bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.bar form{margin:0}
+.bar button{margin:0;width:auto;padding:8px 14px;font-size:12.5px;border-radius:11px;background:rgba(255,255,255,.1);
+  color:#c7d0e3;box-shadow:none;font-weight:500}
+.bar button:hover{background:rgba(255,255,255,.16)}
+`;
+
+function wdPage(title: string, body: string, status = 200): Response {
+  const html = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>${escHtml(title)}</title><link rel="icon" href="/favicon.ico" type="image/x-icon">
+<style>${WD_CSS}</style></head><body><div class="wrap">${body}</div></body></html>`;
+  return new Response(html, {
+    status,
+    headers: {
+      "content-type": "text/html;charset=utf-8",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "DENY",
+      "referrer-policy": "no-referrer",
+    },
+  });
+}
+
+function wdLoginPage(site: string, error?: string, status = 200): Response {
+  return wdPage(
+    `${site} · WebDAV 登录`,
+    `<div class="card">
+      <div class="brand"><div class="logo">🗂️</div><div><h1>${escHtml(site)}</h1><p>WebDAV 文件访问</p></div></div>
+      <form method="POST" action="/webdav/_login">
+        <label>用户名</label><input name="username" autocomplete="username" autofocus>
+        <label>密码</label><input name="password" type="password" autocomplete="current-password">
+        ${error ? `<div class="err">${escHtml(error)}</div>` : ""}
+        <button type="submit">登录</button>
+      </form>
+      <p class="hint">这是浏览器访问界面。用 Finder / nPlayer 等 WebDAV 客户端连接时，地址填
+        <code>https://pan.lovlin.cn/webdav/</code>，用户名密码与这里相同。</p>
+    </div>`,
+    status
+  );
+}
+
+/** POST /webdav/_login —— 网页表单登录 */
+async function handleWebDavWebLogin(req: Request, env: Env): Promise<Response> {
+  const s = await getSettings(env);
+  const site = s.siteTitle || "cloud-r2pan";
+  if (!s.webdavEnabled || !s.webdavPasswordHash) {
+    return wdPage(`${site} · WebDAV`, `<div class="card"><h1>WebDAV 未启用</h1>
+      <p class="hint">请在后台「系统设置 → WebDAV」中开启服务并设置密码。</p></div>`, 403);
+  }
+  let form: FormData | null = null;
+  try {
+    form = await req.formData();
+  } catch {
+    return wdLoginPage(site, "请求格式错误，请重新登录", 400);
+  }
+  const username = String(form.get("username") ?? "").trim();
+  const password = String(form.get("password") ?? "");
+  if (!(await verifyWebDAVCreds(s, username, password))) {
+    return wdLoginPage(site, "用户名或密码错误", 401);
+  }
+  return new Response(null, {
+    status: 302,
+    headers: {
+      location: "/webdav/",
+      "set-cookie": await buildWebDavCookie(req, env, s),
+      "cache-control": "no-store",
+    },
+  });
+}
+
+/** GET（Accept: text/html）—— 未登录给登录页，已登录给目录列表 */
+async function handleWebDavBrowser(
+  req: Request,
+  env: Env,
+  internalPath: string
+): Promise<Response> {
+  const s = await getSettings(env);
+  const site = s.siteTitle || "cloud-r2pan";
+  if (!s.webdavEnabled || !s.webdavPasswordHash) {
+    return wdPage(
+      `${site} · WebDAV`,
+      `<div class="card"><h1>WebDAV 未启用</h1><p class="hint">请在后台「系统设置 → WebDAV」中开启服务并设置密码。</p></div>`,
+      403
+    );
+  }
+  if (!(await verifyWebDAVCookie(req, env, s))) return wdLoginPage(site);
+
+  // 目录浏览
+  const clean = internalPath === "/" ? "/" : internalPath.replace(/\/+$/, "") + "/";
+  const prefix = clean === "/" ? "" : clean.replace(/^\//, "");
+  let entries: any[] = [];
+  let truncated = false;
+  try {
+    const st = await storage(env);
+    const r = await st.list({ prefix, limit: 500 });
+    entries = r.entries ?? [];
+    truncated = r.truncated;
+  } catch (err: any) {
+    return wdPage(
+      `${site} · WebDAV`,
+      `<div class="card"><h1>读取目录失败</h1><p class="hint">${escHtml(String(err?.message ?? err))}</p></div>`,
+      500
+    );
+  }
+
+  entries.sort((a, b) => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1));
+
+  // 面包屑
+  const parts = clean.split("/").filter(Boolean);
+  let acc = "/";
+  const crumbs = [`<a href="/webdav/">根目录</a>`];
+  for (const p of parts) {
+    acc += p + "/";
+    crumbs.push(`<span>/</span><a href="/webdav/${escHtml(encodeURI(acc))}">${escHtml(p)}</a>`);
+  }
+
+  const rows = entries
+    .map((e) => {
+      const href = `/webdav/${escHtml(encodeURI(clean + e.name))}`;
+      return `<div class="row"><span class="ico">${e.isDir ? "📁" : "📄"}</span>
+        <a href="${href}">${escHtml(e.name)}</a>
+        <span class="meta">${e.isDir ? "文件夹" : fmtSize(e.size)}</span></div>`;
+    })
+    .join("");
+
+  const body = `<div class="bar">
+      <div class="brand" style="margin:0"><div class="logo">🗂️</div>
+        <div><h1>${escHtml(site)}</h1><p>WebDAV · ${escHtml(s.webdavUsername || "share")}</p></div></div>
+      <form method="POST" action="/webdav/_logout"><button type="submit">退出</button></form>
+    </div>
+    <div class="crumb">${crumbs.join("")}</div>
+    <div class="list">${rows || `<div class="empty">这个目录是空的</div>`}</div>
+    ${truncated ? `<p class="hint">条目过多，仅显示前 500 项。</p>` : ""}`;
+
+  return wdPage(`${site} · ${clean}`, body);
 }
