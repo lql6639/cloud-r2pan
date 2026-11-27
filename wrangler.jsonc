@@ -8,16 +8,6 @@
 
   // ═══════════════ 管理员邮箱验证码登录 ═══════════════
   // 需要同时配置 secret RESEND_API_KEY 才会生效（登录页才显示邮箱登录入口）。
-  // ADMIN_EMAIL 是唯一白名单，其他邮箱一律拒发，防止被当成发信器滥用。
-  //
-  // ⚠️ 必须用「非 lovlin.cn 根域」的地址。
-  //    Resend 的信封发件人是 ...@send.lovlin.cn，若收件人也在 lovlin.cn，
-  //    Cloudflare Email Routing 会按同域回环直接丢弃（不进转发日志，表现为"发了收不到"）。
-  //    跨域（→ QQ）已验证可达；若以后要用域名邮箱，需在 Resend 单独验证另一个域名再换过来。
-  "vars": {
-    "ADMIN_EMAIL": "1740242084@qq.com",
-    "MAIL_FROM": "R2网盘 <noreply@lovlin.cn>"
-  },
 
   // 保留原有的 workers.dev 测试域名（不加这一行，部署后会被默认关闭）
   "workers_dev": true,
@@ -58,9 +48,11 @@
   ],
 
   // ═══════════════ 密钥/敏感配置（不在仓库中声明） ═══════════════
-  // 本地开发：创建 .dev.vars 文件（已 .gitignore）写入 admin=你的密钥
-  // 生产环境：通过 Cloudflare 控制台 → Worker → Settings → Secrets 添加
-  //          或执行 npx wrangler secret put admin
+  //
+  //   ADMIN_EMAIL    邮箱验证码唯一白名单
+  //   MAIL_FROM      验证码发件人
+  //
+  // 本地开发：在 .dev.vars 里写 admin=xxx（该文件已入库，不要放真实发信密钥）
 
   // 将 public/*.html 作为文本模块导入
   "rules": [
